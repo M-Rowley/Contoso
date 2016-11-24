@@ -11,15 +11,36 @@ namespace Contoso
     public class AzureDatabaseService
     {
         //Initialise instance and client
-        public static AzureDatabaseService instance;
-        public MobileServiceClient client;
-        public IMobileServiceTable<ContosoBankAccounts> bankAccountTable;
+        private static AzureDatabaseService instance;
+        private MobileServiceClient client;
+        private IMobileServiceTable<ContosoBankAccounts> bankAccountTable;
 
         //explicit constructor
-        AzureDatabaseService()
+        private AzureDatabaseService()
         {
             this.client = new MobileServiceClient("http://MrowContosoMobile.azurewebsites.net");
             this.bankAccountTable = this.client.GetTable<ContosoBankAccounts>();
+        }
+
+        //publicly accessible client get method
+        public MobileServiceClient AzureClient
+        {
+            get { return client; }
+        }
+
+        //publicly accessible instance get method
+        public static AzureDatabaseService AzureDatabaseServiceInstance
+        {
+            get
+            {
+                //creates instance of static variable instance upon call if doesn't already exist 
+                if (instance == null)
+                {
+                    instance = new AzureDatabaseService();
+                }
+
+                return instance;
+            }
         }
 
         //POST (C)
