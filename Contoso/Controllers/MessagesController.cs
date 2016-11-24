@@ -119,10 +119,25 @@ namespace Contoso
                     else
                     //Attempts currency exchange of form "[Currency Code (3)] [Currency Code (3)] [Amount]" using fixer.io
                     {
-                        string fromCurrency = userMessage.ToUpper().Substring(0, 3);
-                        string toCurrency = userMessage.ToUpper().Substring(4, 3);
-                        string currencyString = userMessage.Substring(8);
-                        double currencyDouble = double.Parse(currencyString);
+                        double currencyDouble;
+                        string fromCurrency, toCurrency, currencyString;
+
+                        //if input is just a number, uses the previous values of currency codes and input as amount
+                        if (double.TryParse(userMessage, out currencyDouble))
+                        {
+                            toCurrency = userData.GetProperty<string>("toCurrencyLast");
+                            fromCurrency = userData.GetProperty<string>("fromCurrencyLast");
+                        }else{
+                            //else gets currency codes and amount from substrings
+                            fromCurrency = userMessage.ToUpper().Substring(0, 3);
+                            toCurrency = userMessage.ToUpper().Substring(4, 3);
+                            currencyString = userMessage.Substring(8);
+                            currencyDouble = double.Parse(currencyString);
+
+                            userData.SetProperty<string>("toCurrencyLast", toCurrency);
+                            userData.SetProperty<string>("fromCurrencyLast", fromCurrency);
+                            await stateClient.BotState.SetUserDataAsync(activity.ChannelId, activity.From.Id, userData);
+                        }
 
                         HttpClient HttpClient = new HttpClient();
                         string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency)); //sends GET request to fixer.io server
@@ -142,7 +157,7 @@ namespace Contoso
                         ThumbnailCard exchangeCard = new ThumbnailCard()
                         {
                             Title = $"{fromCurrency} to {toCurrency}",
-                            Subtitle = $"{currencyString} {fromCurrency} is equal to {rate * currencyDouble} {toCurrency}",
+                            Subtitle = $"{currencyDouble} {fromCurrency} is equal to {rate * currencyDouble} {toCurrency}\n\nType another amount to use the same currencies",
                             Images = cardImage
                         };
 
