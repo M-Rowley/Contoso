@@ -34,10 +34,10 @@ namespace Contoso
                 StateClient stateClient = activity.GetStateClient();
                 HttpClient luisClient = new HttpClient();
                 BotData userData = await stateClient.BotState.GetUserDataAsync(activity.ChannelId, activity.From.Id);
-                var userMessage = activity.Text;
-                //bool formatMatch = false; //used for sorting between database commands and greet/exchange commands
+                string userMessage = activity.Text; //User's incoming message
                 string endOutput = ""; //Used for final reply
 
+                //LUIS is used to determine the type of query and, for greetings/GETs, execute the method
                 string luisQuery = await luisClient.GetStringAsync(new Uri("https://api.projectoxford.ai/luis/v2.0/apps/90953ceb-19de-4415-9d85-0e11a325f27f?subscription-key=46c1c462651649af974ac4ec39dfa474&q=" + userMessage)); //sends GET request to luis
                 string intent = JObject.Parse(luisQuery)["topScoringIntent"]["intent"].ToString(); //deserializes json object, stores top intent as string
 
@@ -49,9 +49,11 @@ namespace Contoso
 
                 if (intent.Equals("exchange"))
                 {
+                    //Calculates exchange rates between two currencies
                     double currencyDouble;
                     string fromCurrency, toCurrency, currencyString;
 
+                    //checks if message is either a number, or two currency codes followed by a number
                     if (double.TryParse(userMessage, out currencyDouble) || double.TryParse(userMessage.Substring(8), out currencyDouble))
                     {
                         //if input is just a number, uses the previous values of currency codes and input as amount
@@ -62,24 +64,24 @@ namespace Contoso
                         }
                         else
                         {
-                            {
-                                //else gets currency codes and amount from substrings
-                                fromCurrency = userMessage.ToUpper().Substring(0, 3);
-                                toCurrency = userMessage.ToUpper().Substring(4, 3);
-                                currencyString = userMessage.Substring(8);
-                                currencyDouble = double.Parse(currencyString);
+                        
+                            //else gets currency codes and amount from substrings
+                            fromCurrency = userMessage.ToUpper().Substring(0, 3);
+                            toCurrency = userMessage.ToUpper().Substring(4, 3);
+                            currencyString = userMessage.Substring(8);
+                            currencyDouble = double.Parse(currencyString);
 
-                                userData.SetProperty<string>("toCurrencyLast", toCurrency);
-                                userData.SetProperty<string>("fromCurrencyLast", fromCurrency);
-                                await stateClient.BotState.SetUserDataAsync(activity.ChannelId, activity.From.Id, userData);
-                            }
+                            userData.SetProperty<string>("toCurrencyLast", toCurrency);
+                            userData.SetProperty<string>("fromCurrencyLast", fromCurrency);
+                            await stateClient.BotState.SetUserDataAsync(activity.ChannelId, activity.From.Id, userData);
                         }
 
+                        //queries the fixer.io API
                         HttpClient HttpClient = new HttpClient();
-                        string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency)); //sends GET request to fixer.io server
-                                                                                                                                                                     //var json = JObject.Parse(getCurrency); //deserializes json object
-                        var rate = double.Parse(JObject.Parse(getCurrency)["rates"][toCurrency].ToString()); //desserializes JSON object and takes toCurrency rate from fixer.io data object
-
+                        string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency));
+                        //deserializes JSON object and takes toCurrency rate
+                        var rate = double.Parse(JObject.Parse(getCurrency)["rates"][toCurrency].ToString());
+                        
                         //creates thumbnail card
                         Activity thumbnailReply = activity.CreateReply();
                         thumbnailReply.Recipient = activity.From;
@@ -97,62 +99,17 @@ namespace Contoso
                             Images = cardImage
                         };
 
+                        //finalises card and replies
                         Attachment cardAttachment = exchangeCard.ToAttachment();
                         thumbnailReply.Attachments.Add(cardAttachment);
                         await connector.Conversations.SendToConversationAsync(thumbnailReply);
                     }
                     else
                     {
+                        //reset the exchange intent so it's processed as a normal reply, not a card reply
                         intent = "";
                         endOutput = "The command to calculate an exchange is:\n\n\"[Original Currency Code (3)] [New Currency Code (3)] [amount]\"\n\n You may also simply enter a number to use the previous currencies";
                     }
-
-                    /*    //if input is just a number, uses the previous values of currency codes and input as amount
-                        if (double.TryParse(userMessage, out currencyDouble))
-                    {
-                        toCurrency = userData.GetProperty<string>("toCurrencyLast");
-                        fromCurrency = userData.GetProperty<string>("fromCurrencyLast");
-                    }
-                    else
-                    {
-                        {
-                            //else gets currency codes and amount from substrings
-                            fromCurrency = userMessage.ToUpper().Substring(0, 3);
-                            toCurrency = userMessage.ToUpper().Substring(4, 3);
-                            currencyString = userMessage.Substring(8);
-                            currencyDouble = double.Parse(currencyString);
-
-                            userData.SetProperty<string>("toCurrencyLast", toCurrency);
-                            userData.SetProperty<string>("fromCurrencyLast", fromCurrency);
-                            await stateClient.BotState.SetUserDataAsync(activity.ChannelId, activity.From.Id, userData);
-                        }
-                    }
-
-                    HttpClient HttpClient = new HttpClient();
-                    string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency)); //sends GET request to fixer.io server
-                    //var json = JObject.Parse(getCurrency); //deserializes json object
-                    var rate = double.Parse(JObject.Parse(getCurrency)["rates"][toCurrency].ToString()); //desserializes JSON object and takes toCurrency rate from fixer.io data object
-
-                    //creates thumbnail card
-                    Activity thumbnailReply = activity.CreateReply();
-                    thumbnailReply.Recipient = activity.From;
-                    thumbnailReply.Type = "message";
-                    thumbnailReply.Attachments = new List<Attachment>();
-
-                    //adds contoso logo to card
-                    List<CardImage> cardImage = new List<CardImage>();
-                    cardImage.Add(new CardImage(url: "http://i.imgur.com/je1BEZr.png"));
-
-                    ThumbnailCard exchangeCard = new ThumbnailCard()
-                    {
-                        Title = $"{fromCurrency} to {toCurrency}",
-                        Subtitle = $"{currencyDouble} {fromCurrency} is equal to {rate * currencyDouble} {toCurrency}\n\nType another amount to use the same currencies",
-                        Images = cardImage
-                    };
-
-                    Attachment cardAttachment = exchangeCard.ToAttachment();
-                    thumbnailReply.Attachments.Add(cardAttachment);
-                    await connector.Conversations.SendToConversationAsync(thumbnailReply);*/
                 }
 
                 if (intent.Equals("getAccounts"))
@@ -232,14 +189,18 @@ namespace Contoso
 
                 if (intent.Equals("none"))
                 {
+                    //Catch-all for when LUIS gets confused. AGAIN.
                     endOutput = "I didn't understand that command, sorry :(";
                 }
 
+                //reply
                 if (!intent.Equals("exchange"))
                 {
                     Activity reply = activity.CreateReply(endOutput);
                     await connector.Conversations.ReplyToActivityAsync(reply);
                 }
+
+                //end
             }
             else
             {
