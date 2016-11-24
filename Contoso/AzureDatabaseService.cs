@@ -38,7 +38,6 @@ namespace Contoso
                 {
                     instance = new AzureDatabaseService();
                 }
-
                 return instance;
             }
         }

@@ -19,37 +19,40 @@ namespace Contoso
     public class MessagesController : ApiController
     {
         /// <summary>
-        /// POST: api/Messages
-        /// Receive a message from a user and reply to it
+        /// Contoso Bank Bot
+        /// Greets on receiving "Hello"
+        /// Returns an exchange rate card on receiving {currency code} {currency code} {amount}
+        /// interacts with a database on "create/get/update/delete bank account(s) [name] [amount]
         /// </summary>
         public async Task<HttpResponseMessage> Post([FromBody]Activity activity)
         {
             if (activity.Type == ActivityTypes.Message)
-            {
-                string endOutput = "";
-
+            { 
                 MobileServiceClient mobileClient = AzureDatabaseService.AzureDatabaseServiceInstance.AzureClient;
                 ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                 StateClient stateClient = activity.GetStateClient();
                 BotData userData = await stateClient.BotState.GetUserDataAsync(activity.ChannelId, activity.From.Id);
                 var userMessage = activity.Text;
-                bool accountsRequest = false;
+                bool accountsRequest = false; //Used for sorting between database commands and greet/exchange commands
+                string endOutput = ""; //Used for final reply
 
+                //Sorts database commands
                 if (userMessage.ToLower().Contains("account"))
                 {
                     accountsRequest = true;
                 }
 
+                //split between database and greet/exchange functions
                 if (accountsRequest)
                 {
                     endOutput = "Didn't understand that request, sorry";
                     //GET
+                    //takes input of form "get bank accounts"
                     if (userMessage.ToLower().Equals("get bank accounts"))
                     {
                         endOutput = "";
                         //queries database using AzureDatabaseServices GET method, creates list of bank accounts in database
                         List<ContosoBankAccounts> bankAccountList = await AzureDatabaseService.AzureDatabaseServiceInstance.getAccounts();
-                        //endOutput = $"{AzureDatabaseService.AzureDatabaseServiceInstance.AzureClient}";
                         foreach (ContosoBankAccounts bankAccount in bankAccountList)
                         {
                             endOutput += $"Bank Account = {bankAccount.id}\n\n Account Balance = ${bankAccount.balance}\n\n";
@@ -57,6 +60,7 @@ namespace Contoso
                     }
 
                     //POST
+                    //takes input of form "create bank account [name(5)] [amount]"
                     if (userMessage.ToLower().Contains("create bank account"))
                     {
                         ContosoBankAccounts bankAccount = new ContosoBankAccounts()
@@ -71,6 +75,7 @@ namespace Contoso
                     }
 
                     //PUT
+                    //takes input of form "update bank account [name(5)] [amount]"
                     if (userMessage.ToLower().Contains("update"))
                     {
                         ContosoBankAccounts bankAccount = new ContosoBankAccounts()
@@ -85,6 +90,7 @@ namespace Contoso
                     }
 
                     //DELETE
+                    //takes input of form "delete bank account [name(5)]"
                     if (userMessage.ToLower().Contains("delete"))
                     {
                         ContosoBankAccounts bankAccount = new ContosoBankAccounts()
@@ -97,38 +103,39 @@ namespace Contoso
                         await AzureDatabaseService.AzureDatabaseServiceInstance.deleteAccount(bankAccount);
                     }
 
+                    //generates reply
                     Activity reply = activity.CreateReply(endOutput);
                     await connector.Conversations.ReplyToActivityAsync(reply);
                 }
                 else{
-                    //hello!
+                    //Greets user, lists commands
                     if (userMessage.ToLower().Equals("hello"))
                     {
-                        endOutput = $"Hi there, {activity.From.Name}! I'm ContosoBot, welcome to Contoso Bank!";
+                        endOutput = $"Hi there, {activity.From.Name}! I'm ContosoBot, welcome to Contoso Bank!\n\nThe commands available are:\n\nExchange Rate lookup: (Currency Code (from)) (Currency Code(to)) (amount)\n\n get/create/update/delete bank account [Name (5 chars)] [amount]";
 
                         Activity reply = activity.CreateReply(endOutput);
                         await connector.Conversations.ReplyToActivityAsync(reply);
                     }
                     else
+                    //Attempts currency exchange of form "[Currency Code (3)] [Currency Code (3)] [Amount]" using fixer.io
                     {
                         string fromCurrency = userMessage.ToUpper().Substring(0, 3);
                         string toCurrency = userMessage.ToUpper().Substring(4, 3);
                         string currencyString = userMessage.Substring(8);
                         double currencyDouble = double.Parse(currencyString);
-                        //endOutput = $"interpreted as: convert {currencyDouble} {fromCurrency} to {toCurrency}\n";
 
                         HttpClient HttpClient = new HttpClient();
-                        string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency));
-                        var json = JObject.Parse(getCurrency);
-                        var rate = double.Parse(json["rates"][toCurrency].ToString());
+                        string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency)); //sends GET request to fixer.io server
+                        var json = JObject.Parse(getCurrency); //deserializes json object
+                        var rate = double.Parse(json["rates"][toCurrency].ToString()); //takes toCurrency rate from fixer.io data object
 
-                        //endOutput += $"\nResult = {rate * currencyDouble} {toCurrency}";
-
+                        //creates thumbnail card
                         Activity thumbnailReply = activity.CreateReply();
                         thumbnailReply.Recipient = activity.From;
                         thumbnailReply.Type = "message";
                         thumbnailReply.Attachments = new List<Attachment>();
 
+                        //adds contoso logo to card
                         List<CardImage> cardImage = new List<CardImage>();
                         cardImage.Add(new CardImage(url: "http://i.imgur.com/je1BEZr.png"));
 
@@ -144,71 +151,6 @@ namespace Contoso
                         await connector.Conversations.SendToConversationAsync(thumbnailReply);
                     }
                 }
-
-                /*if (userMessage.ToLower().Contains("account")) {
-                    //GET
-                    if (userMessage.ToLower().Equals("get bank accounts"))
-                    {
-                        //queries database using AzureDatabaseServices GET method, creates list of bank accounts in database
-                        List<ContosoBankAccounts> bankAccountList = await AzureDatabaseService.instance.getAccounts();
-                        foreach (ContosoBankAccounts bankAccount in bankAccountList)
-                        {
-                            endOutput += $"Bank Account Number = {bankAccount.id}\n Account Balance = ${bankAccount.balance}\n";
-                            Activity reply = activity.CreateReply(endOutput);
-                            await connector.Conversations.ReplyToActivityAsync(reply);
-                        }
-                    }
-
-                    //POST
-                    if (userMessage.ToLower().Equals("create bank account"))
-                    {
-                        ContosoBankAccounts bankAccount = new ContosoBankAccounts();
-                        bankAccount.id = userMessage.Substring(20, 5);
-                        bankAccount.balance = double.Parse(userMessage.Substring(25, 10));
-                        bankAccount.createdAt = DateTime.Now;
-
-                        await AzureDatabaseService.instance.addAccount(bankAccount);
-                        endOutput = $"Account {bankAccount.id} created";
-                        Activity reply = activity.CreateReply(endOutput);
-                        await connector.Conversations.ReplyToActivityAsync(reply);
-                    }
-                }*/
-                /*else
-                {
-                    string fromCurrency = userMessage.ToUpper().Substring(0, 3);
-                    string toCurrency = userMessage.ToUpper().Substring(4, 3);
-                    string currencyString = userMessage.Substring(8);
-                    double currencyDouble = double.Parse(currencyString);
-                    //endOutput = $"interpreted as: convert {currencyDouble} {fromCurrency} to {toCurrency}\n";
-
-                    HttpClient HttpClient = new HttpClient();
-                    string getCurrency = await HttpClient.GetStringAsync(new Uri("http://api.fixer.io/latest?base=" + fromCurrency + "&symbols=" + toCurrency));
-                    var json = JObject.Parse(getCurrency);
-                    var rate = double.Parse(json["rates"][toCurrency].ToString());
-
-                    //endOutput += $"\nResult = {rate * currencyDouble} {toCurrency}";
-
-                    Activity thumbnailReply = activity.CreateReply();
-                    thumbnailReply.Recipient = activity.From;
-                    thumbnailReply.Type = "message";
-                    thumbnailReply.Attachments = new List<Attachment>();
-
-                    List<CardImage> cardImage = new List<CardImage>();
-                    cardImage.Add(new CardImage(url: "http://i.imgur.com/je1BEZr.png"));
-
-                    ThumbnailCard exchangeCard = new ThumbnailCard()
-                    {
-                        Title = $"{fromCurrency} to {toCurrency}",
-                        Subtitle = $"{currencyString} {fromCurrency} is equal to {rate * currencyDouble} {toCurrency}",
-                        Images = cardImage
-                    };
-
-                    Attachment cardAttachment = exchangeCard.ToAttachment();
-                    thumbnailReply.Attachments.Add(cardAttachment);
-                    await connector.Conversations.SendToConversationAsync(thumbnailReply);
-                }*/
-
-                
             }
             else
             {
