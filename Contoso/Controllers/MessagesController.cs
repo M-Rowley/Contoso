@@ -94,8 +94,8 @@ namespace Contoso
 
                         ThumbnailCard exchangeCard = new ThumbnailCard()
                         {
-                            Title = $"{fromCurrency} to {toCurrency}",
-                            Subtitle = $"{currencyDouble} {fromCurrency} is equal to {rate * currencyDouble} {toCurrency}\n\n\n_Type another amount to use the same currencies_",
+                            Title = $"{currencyDouble} {fromCurrency} = {rate * currencyDouble} {toCurrency}",
+                            Subtitle = "Type another amount to use the same currencies",
                             Images = cardImage
                         };
 
