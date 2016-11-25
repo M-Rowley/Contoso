@@ -187,7 +187,7 @@ namespace Contoso
                     }
                 }
 
-                if (intent.Equals("none"))
+                if (intent.Equals("None"))
                 {
                     //Catch-all for when LUIS gets confused. AGAIN.
                     endOutput = "I didn't understand that command, sorry :(";
